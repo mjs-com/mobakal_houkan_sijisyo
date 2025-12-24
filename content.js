@@ -29,7 +29,7 @@ function getNextMonthLast() {
 // 入力欄に値を設定し、イベントを発火する関数
 function setInputValue(inputElement, value, fieldName) {
   if (!inputElement) {
-    console.error(`エラー: name="${fieldName}" の入力欄が見つかりません。`);
+    // エラーではなく、単に失敗として返す（エラーログは出さない）
     return false;
   }
 
@@ -135,13 +135,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         setTimeout(attemptFillDates, retryDelay);
       } else {
         // 最大リトライ回数に達した場合
-        console.log(`[Content]${frameInfo} 入力欄の検索結果 (最終試行):`);
-        console.log("  - disp_date:", fields.disp_date ? "見つかりました" : "見つかりません");
-        console.log("  - char1_kinyubi:", fields.char1_kinyubi ? "見つかりました" : "見つかりません");
-        console.log("  - char1_houkanstart:", fields.char1_houkanstart ? "見つかりました" : "見つかりません");
-        console.log("  - char1_houkanend:", fields.char1_houkanend ? "見つかりました" : "見つかりません");
+        // 入力欄が見つからなかったフレームでは、エラーログを出さずに静かに終了
+        // （成功したフレームからのレスポンスが既に返されているため）
+        const foundFields = Object.keys(fields).filter(key => fields[key] !== null);
+        if (foundFields.length === 0) {
+          // このフレームには入力欄がない（正常な状態）
+          // レスポンスを返さない（成功したフレームからのレスポンスのみを有効にする）
+          return;
+        }
         
-        // 見つかったものだけ処理
+        // 一部見つかった場合は処理を実行（通常はここには来ないはず）
         let successCount = 0;
         if (setInputValue(fields.disp_date, currentMonth22nd, "disp_date")) successCount++;
         if (setInputValue(fields.char1_kinyubi, currentMonth22nd, "char1_kinyubi")) successCount++;
@@ -155,10 +158,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           frame: isTopFrame ? "top" : "sub"
         };
         
-        console.log(`[Content]${frameInfo} 処理結果:`, result);
-
-        // 結果を返す（見つからなかった場合でも、見つかった分だけ返す）
-        sendResponse(result);
+        // 成功した場合のみログを出す
+        if (successCount > 0) {
+          console.log(`[Content]${frameInfo} 処理結果:`, result);
+          sendResponse(result);
+        }
+        // 失敗した場合は何も返さない（エラーログも出さない）
       }
     }
     
